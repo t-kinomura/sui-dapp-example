@@ -5,6 +5,8 @@ module my_first_package::my_module {
     use sui::transfer;
     use sui::tx_context::{Self, TxContext};
     #[test_only]
+    use std::debug;
+    #[test_only]
     use sui::test_utils::assert_eq;
 
     // Part 2: Struct definitions
@@ -43,7 +45,13 @@ module my_first_package::my_module {
     }
 
     // Part 5: Public/entry functions (introduced later in the tutorial)
-    public fun sword_create(magic: u64, strength: u64, recipient: address, ctx: &mut TxContext) {
+    public fun sword_create(
+        forge: &mut Forge,
+        magic: u64,
+        strength: u64,
+        recipient: address,
+        ctx: &mut TxContext
+    ) {
         use sui::transfer;
 
         let sword = Sword {
@@ -51,6 +59,8 @@ module my_first_package::my_module {
             magic,
             strength,
         };
+
+        forge.swords_created = forge.swords_created + 1;
 
         transfer::transfer(sword, recipient);
     }
@@ -94,21 +104,27 @@ module my_first_package::my_module {
         let scenario = &mut scenario_val;
         {
             init(test_scenario::ctx(scenario));
+            debug::print(scenario);
         };
 
         test_scenario::next_tx(scenario, admin);
         {
-            sword_create(42, 7, intial_owner, test_scenario::ctx(scenario));
+            debug::print(scenario);
+            let forge = test_scenario::take_from_sender<Forge>(scenario);
+            sword_create(&mut forge, 42, 7, intial_owner, test_scenario::ctx(scenario));
+            test_scenario::return_to_sender(scenario, forge);
         };
 
         test_scenario::next_tx(scenario, intial_owner);
         {
+            debug::print(scenario);
             let sword = test_scenario::take_from_sender<Sword>(scenario);
             sword_transfer(sword, final_owner, test_scenario::ctx(scenario));
         };
 
         test_scenario::next_tx(scenario, final_owner);
         {
+            debug::print(scenario);
             let sword = test_scenario::take_from_sender<Sword>(scenario);
 
             assert_eq(magic(&sword), 42);
@@ -118,5 +134,28 @@ module my_first_package::my_module {
         };
 
         test_scenario::end(scenario_val);
+    }
+
+    #[test_only] use sui::test_scenario;
+    #[test_only] const ADMIN: address = @0xAD;
+    #[test]
+    public fun test_module_init() {
+        let ts = test_scenario::begin(@0x0);
+        {
+            test_scenario::next_tx(&mut ts, ADMIN);
+            init(test_scenario::ctx(&mut ts));
+        };
+
+        {
+            test_scenario::next_tx(&mut ts, ADMIN);
+
+            let forge = test_scenario::take_from_sender<Forge>(&mut ts);
+
+            assert_eq(swords_created(&forge), 0);
+
+            test_scenario::return_to_sender(&mut ts, forge);
+        };
+
+        test_scenario::end(ts);
     }
 }
